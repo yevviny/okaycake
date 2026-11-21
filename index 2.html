@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>오케이!크 — 겉과 속</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@300;400&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root { --p: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }
+  body { font-family: 'IBM Plex Sans KR', sans-serif; color: #111; user-select: none; -webkit-user-select: none; touch-action: none; }
+  canvas#fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+  canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; cursor: pointer; }
+
+  /* ---------- 겉 (bright layer) ---------- */
+  #outer-layer { position: fixed; inset: 0; z-index: 1; pointer-events: none; transition: opacity .4s; }
+  .deco { position: absolute; border-radius: 50%; }
+  #outer-ment {
+    position: fixed; z-index: 3; pointer-events: none;
+    left: 4vw; top: 6vh;
+    font-family: 'Jua', sans-serif; font-size: clamp(40px, 7vw, 112px); line-height: 1.02;
+    color: #FF4A10; letter-spacing: -0.01em;
+    text-shadow: 3px 3px 0 #fff, 6px 6px 0 #E8F542, 9px 9px 0 #00F5C0;
+    transform: rotate(-6deg); transform-origin: left top;
+    transition: opacity .35s, filter .35s;
+  }
+  #outer-sub {
+    position: fixed; z-index: 3; pointer-events: none; left: 4.4vw; top: calc(6vh + clamp(100px, 17vw, 260px));
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.6; color: #FF6A00;
+    transform: rotate(-6deg); transform-origin: left top; transition: opacity .35s;
+  }
+
+  /* ---------- 속 (monochrome layer) ---------- */
+  #inner-layer { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; }
+  #inner-ment {
+    position: fixed; z-index: 3; pointer-events: none;
+    right: 4vw; bottom: 9vh; text-align: right;
+    font-weight: 300; font-size: clamp(24px, 3.6vw, 56px); letter-spacing: 0.02em; color: #111;
+  }
+  #inner-ment span { opacity: 0; transition: opacity .6s, filter .6s; filter: blur(4px); display: inline-block; white-space: pre; }
+  #inner-ment span.on { opacity: 1; filter: blur(0); }
+  #inner-sub {
+    position: fixed; z-index: 3; pointer-events: none; right: 4vw; bottom: calc(9vh + clamp(34px, 5vw, 72px));
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #777; text-align: right; line-height: 1.6;
+    opacity: 0; transition: opacity .6s;
+  }
+
+  /* ---------- HUD ---------- */
+  #meta { position: fixed; z-index: 3; right: 4vw; top: 5vh; text-align: right; pointer-events: none;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.7; color: #111; }
+  #meta b { font-weight: 400; }
+  #meter { font-size: 28px; font-weight: 300; letter-spacing: 0.04em; }
+  #hint { position: fixed; z-index: 3; left: 50%; bottom: 4vh; transform: translateX(-50%); pointer-events: none;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FF6A00; letter-spacing: .06em;
+    transition: opacity .6s; white-space: nowrap; animation: blink 2.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  #again { position: fixed; z-index: 4; left: 50%; bottom: 4vh; transform: translateX(-50%);
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: .08em; color: #111;
+    background: #fff; border: 1px solid #111; border-radius: 999px; padding: 10px 20px; cursor: pointer;
+    opacity: 0; pointer-events: none; transition: opacity .8s; }
+  body.final #again { opacity: 1; pointer-events: auto; }
+  #again:hover { background: #111; color: #fff; }
+  #fs { position: fixed; z-index: 4; left: 4vw; bottom: 4vh; background: none; border: none; cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #999; letter-spacing: .06em; }
+  #fs:hover { color: #111; }
+  /* ---------- camera / hands ---------- */
+  #cam { position: fixed; z-index: 4; left: 4vw; bottom: calc(4vh + 48px); width: 150px; border-radius: 6px;
+    transform: scaleX(-1); filter: grayscale(1) contrast(1.15); opacity: 0; pointer-events: none; transition: opacity .6s; }
+  body.cam-on #cam { opacity: .85; }
+  #cam-status { position: fixed; z-index: 4; left: 4vw; bottom: calc(4vh + 22px); pointer-events: none;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #999; letter-spacing: .04em; }
+  body.cam-on #cam-status { color: #FF3A10; }
+  .hand { position: fixed; z-index: 5; left: 0; top: 0; width: 64px; height: 64px; border-radius: 50%; pointer-events: none; opacity: 0; transition: opacity .25s;
+    background: radial-gradient(circle, #FF3A10 0 13%, #fff 14% 28%, #FF3A10 29% 39%, #fff 40% 56%, #E8F542 57% 70%, #00F5C0 71% 100%); }
+  .hand.on { opacity: .92; }
+  @media (max-width: 700px) {
+    #outer-sub, #inner-sub { display: none; }
+    #meta { top: auto; bottom: 14vh; }
+    #fs { display: none; }
+  }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+
+<div id="outer-layer" style="display:none"></div>
+<svg id="inner-layer" style="display:none" viewBox="0 0 1000 1000"></svg>
+
+
+
+<div id="meta">
+  <div>오케이!크 / SURFACE</div>
+  <div id="meter">100%</div>
+</div>
+
+<div id="hint">구를 눌러 깎아보세요 · 드래그로 돌리기</div>
+<button id="again">다시 둥글게 ↺</button>
+<video id="cam" playsinline muted></video>
+<div id="cam-status"></div>
+<button id="fs">⛶ FULLSCREEN</button>
+
+<canvas id="gl"></canvas>
+<canvas id="fx"></canvas>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ================= palette ================= */
+const C = {
+  orange: '#FF6A00', orange2: '#FF8A10', red: '#FF3A10', yellow: '#E8F542',
+  mint: '#00F5C0', green: '#12FF4A', cream: '#FFF1C9', pink: '#F27AD8', blue: '#9CC3EA'
+};
+const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
+
+/* ================= DOM decorations (겉) ================= */
+const outerLayer = document.getElementById('outer-layer');
+(function buildDeco() {
+  const items = [
+    // [left%, top%, sizeVmin, background]
+    [6, 54, 9, `radial-gradient(circle, ${C.green} 0 22%, ${C.yellow} 23% 60%, ${C.mint} 61% 100%)`],
+    [6, 66, 9, `radial-gradient(circle, #8a7a66 0 25%, ${C.blue} 26% 55%, #EEF59A 56% 100%)`],
+    [6, 78, 9, `radial-gradient(circle, #a0f 0 6%, ${C.green} 7% 28%, ${C.pink} 29% 50%, #c9fbf2 51% 100%)`],
+    [6, 90, 9, `radial-gradient(circle, ${C.green} 0 16%, #FFF6A8 17% 70%, #d6ff9a 71% 100%)`],
+    [91, 6, 9, `radial-gradient(circle, ${C.pink} 0 20%, #c8f6c8 21% 66%, #FFD84A 67% 100%)`],
+  ];
+  for (const [x, y, s, bg] of items) {
+    const d = document.createElement('div'); d.className = 'deco';
+    Object.assign(d.style, { left: x + '%', top: y + '%', width: s + 'vmin', height: s + 'vmin', background: bg, transform: 'translate(-50%,-50%)' });
+    outerLayer.appendChild(d);
+  }
+  // stacked mint ellipses (right column)
+  for (let i = 0; i < 5; i++) {
+    const d = document.createElement('div'); d.className = 'deco';
+    Object.assign(d.style, { left: '92%', top: (22 + i * 9) + '%', width: '9vmin', height: '3.2vmin', transform: 'translate(-50%,-50%)',
+      background: i % 2 ? C.green : C.mint, boxShadow: `0 0 0 .5vmin ${C.mint}`, opacity: 0.9 });
+    outerLayer.appendChild(d);
+  }
+  // scattered dots
+  for (let i = 0; i < 16; i++) {
+    const d = document.createElement('div'); d.className = 'deco';
+    const s = rand(1, 2.2);
+    const x = Math.random() < .5 ? rand(14, 30) : rand(70, 86);
+    Object.assign(d.style, { left: x + '%', top: rand(8, 94) + '%', width: s + 'vmin', height: s + 'vmin',
+      background: [C.yellow, C.green, C.red][i % 3] });
+    outerLayer.appendChild(d);
+  }
+})();
+
+/* ================= SVG technical drawing (속) ================= */
+const innerLayer = document.getElementById('inner-layer');
+(function buildInnerSvg() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const add = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); innerLayer.appendChild(e); return e; };
+  // dotted concentric arcs, top-left like poster 2
+  for (let i = 0; i < 9; i++) {
+    add('circle', { cx: 180, cy: 180, r: 120 + i * 34, fill: 'none', stroke: '#bbb', 'stroke-width': 6, 'stroke-dasharray': '2 9', 'stroke-linecap': 'round' });
+  }
+  add('line', { x1: -50, y1: 640, x2: 560, y2: -40, stroke: '#ccc', 'stroke-width': 1 });
+  add('line', { x1: 0, y1: 996, x2: 1000, y2: 996, stroke: '#111', 'stroke-width': 1.5 });
+  // crosses
+  for (let i = 0; i < 28; i++) {
+    const left = Math.random() < .5;
+    const x = left ? rand(30, 260) : rand(760, 980), y = left ? rand(360, 960) : rand(190, 580), s = rand(6, 16), a = rand(-40, 40);
+    const g = add('g', { transform: `translate(${x} ${y}) rotate(${a})`, stroke: '#111', 'stroke-width': 1.2 });
+    const l1 = document.createElementNS(ns, 'line'); Object.entries({ x1: -s, y1: 0, x2: s, y2: 0 }).forEach(([k, v]) => l1.setAttribute(k, v));
+    const l2 = document.createElementNS(ns, 'line'); Object.entries({ x1: 0, y1: -s * 1.6, x2: 0, y2: s * 1.6 }).forEach(([k, v]) => l2.setAttribute(k, v));
+    g.appendChild(l1); g.appendChild(l2);
+  }
+  for (let i = 0; i < 6; i++) add('circle', { cx: rand(60, 940), cy: rand(80, 940), r: rand(5, 10), fill: 'none', stroke: '#111', 'stroke-width': 1 });
+})();
+
+/* ================= three.js setup ================= */
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(2.5, 3, 4); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.6); fill.position.set(-3, -1, 2); scene.add(fill);
+
+/* ---------- outer texture (poster motifs, equirectangular) ---------- */
+function makePainter(g) {
+  const TAU = Math.PI * 2;
+  /* ---- poster type strokes: mint / yellow outline, white band, red pinstripes ---- */
+  function ann(x, y, r0, r1, a0, a1) {
+    g.beginPath(); g.arc(x, y, r1, a0, a1); g.arc(x, y, Math.max(0.1, r0), a1, a0, true); g.closePath(); g.fill();
+  }
+  function band(x, y, rc, bw, a0, a1) {
+    const o = bw * 0.17;
+    g.fillStyle = C.mint;   ann(x + o, y + o * 0.8, rc - bw / 2 - o, rc + bw / 2 + o, a0, a1);
+    g.fillStyle = C.yellow; ann(x + o * 0.45, y + o * 0.35, rc - bw / 2 - o * 0.5, rc + bw / 2 + o * 0.5, a0, a1);
+    g.fillStyle = '#fff';   ann(x, y, rc - bw / 2, rc + bw / 2, a0, a1);
+    g.strokeStyle = C.red; g.lineWidth = bw * 0.13; g.lineCap = 'butt';
+    const n = bw > 70 ? 3 : 2;
+    for (let k = 0; k < n; k++) {
+      const rr = rc - bw / 2 + bw * (k + 0.5) / n;
+      g.beginPath(); g.arc(x, y, rr, a0, a1); g.stroke();
+    }
+  }
+  function dot(x, y, s) {
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+    g.fillStyle = C.red;  g.beginPath(); g.arc(x, y, s * 0.62, 0, TAU); g.fill();
+  }
+  function connector(x1, y1, x2, y2, bw) {
+    g.strokeStyle = C.red; g.lineWidth = bw * 0.14; g.lineCap = 'round';
+    const mx = (x1 + x2) / 2 + rand(-1, 1) * bw, my = (y1 + y2) / 2 + rand(-1, 1) * bw;
+    g.beginPath(); g.moveTo(x1, y1); g.quadraticCurveTo(mx, my, x2, y2); g.stroke();
+    dot(x1, y1, bw * 0.3); dot(x2, y2, bw * 0.3);
+  }
+  function glyph(x, y, rc, bw) {
+    const type = ['O', 'C', 'C', 'S', 'pair'][Math.random() * 5 | 0];
+    const cut = Math.random() < 0.45;
+    g.save();
+    if (cut) { // hard straight cut, like the sliced letters on the poster
+      const ang = rand(0, TAU), big = rc * 4;
+      g.translate(x, y); g.rotate(ang);
+      g.beginPath(); g.rect(-big, -big, big + rand(-0.1, 0.6) * rc, big * 2); g.clip();
+      g.rotate(-ang); g.translate(-x, -y);
+    }
+    if (type === 'O') {
+      band(x, y, rc, bw, 0, TAU);
+      if (Math.random() < 0.6) dot(x, y, bw * 0.32);
+    } else if (type === 'C') {
+      const a0 = rand(0, TAU), a1 = a0 + rand(Math.PI, Math.PI * 1.7);
+      band(x, y, rc, bw, a0, a1);
+      dot(x + Math.cos(a1) * rc, y + Math.sin(a1) * rc, bw * 0.3);
+    } else if (type === 'S') {
+      const r2 = rc * 0.62;
+      band(x, y - r2, r2, bw * 0.85, Math.PI * 0.5, Math.PI * 1.85);
+      band(x, y + r2, r2, bw * 0.85, Math.PI * 1.5, Math.PI * 2.85);
+      dot(x, y, bw * 0.3);
+    } else {
+      const a0 = rand(0, TAU);
+      band(x, y, rc, bw, a0, a0 + rand(Math.PI * 0.8, Math.PI * 1.3));
+      const a = rand(0, TAU);
+      connector(x + Math.cos(a) * rc * 0.9, y + Math.sin(a) * rc * 0.9, x + Math.cos(a + 2.2) * rc * 0.5, y + Math.sin(a + 2.2) * rc * 0.5, bw);
+    }
+    g.restore();
+  }
+
+  /* ---- poster side flowers ---- */
+  const disc = (x, y, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); };
+  function star(x, y, n, ro, ri, col, rot = 0) {
+    g.fillStyle = col; g.beginPath();
+    for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n, rr = i % 2 ? ri : ro; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+    g.closePath(); g.fill();
+  }
+  function flower(x, y, R, type) {
+    if (type === 0) {         // mint ring, orange core, green star
+      disc(x, y, R, C.mint); disc(x, y, R * 0.78, C.orange);
+      star(x, y, 6, R * 0.72, R * 0.32, '#C8E62A', 0.3);
+      star(x, y, 6, R * 0.42, R * 0.2, '#22F05A');
+    } else if (type === 1) {  // pale yellow, blue quatrefoil, brown star
+      disc(x, y, R, '#EEF28A');
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; disc(x + Math.cos(a) * R * 0.3, y + Math.sin(a) * R * 0.3, R * 0.42, C.blue); }
+      star(x, y, 8, R * 0.5, R * 0.36, '#8B7A66');
+    } else if (type === 2) {  // pale cyan, pink circles, green petals, magenta eye
+      disc(x, y, R, '#CFF8F6');
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + 0.39; disc(x + Math.cos(a) * R * 0.42, y + Math.sin(a) * R * 0.42, R * 0.2, '#F59BC0'); }
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        g.save(); g.translate(x + Math.cos(a) * R * 0.3, y + Math.sin(a) * R * 0.3); g.rotate(a);
+        g.fillStyle = '#22E030'; g.beginPath(); g.ellipse(0, 0, R * 0.26, R * 0.1, 0, 0, TAU); g.fill(); g.restore();
+      }
+      disc(x, y, R * 0.12, '#222'); disc(x, y, R * 0.08, '#E01AE0');
+    } else {                  // green-rimmed pale rosette
+      disc(x, y, R, C.green); disc(x, y, R * 0.95, '#C8FFB0');
+      g.globalAlpha = 0.8;
+      for (let i = 0; i < 12; i++) {
+        const a = i * TAU / 12;
+        g.save(); g.translate(x + Math.cos(a) * R * 0.45, y + Math.sin(a) * R * 0.45); g.rotate(a);
+        g.fillStyle = '#FFF6A8'; g.beginPath(); g.ellipse(0, 0, R * 0.42, R * 0.2, 0, 0, TAU); g.fill(); g.restore();
+      }
+      g.globalAlpha = 1; disc(x, y, R * 0.17, C.green);
+    }
+  }
+
+  return { glyph, flower, disc, dot };
+}
+
+function makeOuterTexture() {
+  const W = 4096, H = 2048;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const TAU = Math.PI * 2;
+  // draw at x, and again across the horizontal seam if needed
+  const wrap = (x, pad, fn) => { fn(x); if (x < pad) fn(x + W); if (x > W - pad) fn(x - W); };
+
+  g.fillStyle = C.orange; g.fillRect(0, 0, W, H);
+  // stacked lighter bands (cake layers on the poster)
+  for (let i = 0; i < 7; i++) {
+    const y = H * (0.14 + i * 0.12);
+    g.fillStyle = i % 2 ? 'rgba(255,150,20,0.5)' : 'rgba(255,128,0,0.55)';
+    for (const cx of [0, W / 2, W]) { g.beginPath(); g.ellipse(cx, y, W * 0.3, H * 0.04, 0, 0, TAU); g.fill(); }
+  }
+
+  const { glyph, flower, disc } = makePainter(g);
+  const drawGlyph = (x, y, rc, bw) => wrap(x, rc * 2, xx => glyph(xx, y, rc, bw));
+
+  // dots + thin white arcs underneath
+  for (let i = 0; i < 110; i++) {
+    const rr = rand(10, 26), col = [C.yellow, C.green, C.yellow][i % 3], y = rand(H * .08, H * .92);
+    wrap(rand(0, W), 40, xx => disc(xx, y, rr, col));
+  }
+  g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 3;
+  for (let i = 0; i < 40; i++) { const x = rand(0, W), y = rand(H * .1, H * .9), rr = rand(60, 220), a = rand(0, 6); g.beginPath(); g.arc(x, y, rr, a, a + rand(1, 2.5)); g.stroke(); }
+
+  // flowers
+  for (let i = 0; i < 8; i++) {
+    const R = rand(110, 150), y = rand(H * .22, H * .78);
+    wrap(rand(0, W), R + 10, xx => flower(xx, y, R, i % 4));
+  }
+  // diagonal chains of ring-type glyphs, like the headline flowing down the poster
+  for (let c = 0; c < 16; c++) {
+    let x = rand(0, W), y = rand(H * 0.18, H * 0.45);
+    const dirA = rand(0.7, 1.1) * (Math.random() < .5 ? 1 : -1) + (Math.random() < .5 ? 0 : Math.PI) * 0;
+    const n = 5 + (Math.random() * 5 | 0);
+    for (let i = 0; i < n; i++) {
+      const rc = rand(70, 120), bw = rc * rand(0.55, 0.75);
+      if (y > H * 0.82) break;
+      drawGlyph(((x % W) + W) % W, y, rc, bw);
+      const step = rc * rand(1.3, 1.8);
+      x += Math.cos(dirA) * step * (Math.random() < .5 ? 1 : 0.6);
+      y += Math.abs(Math.sin(dirA)) * step;
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = THREE.RepeatWrapping; tex.anisotropy = 8;
+  return tex;
+}
+
+const outerTex = makeOuterTexture();
+const matOuter = new THREE.MeshStandardMaterial({ map: outerTex, emissive: 0xffffff, emissiveMap: outerTex, emissiveIntensity: 0.35, roughness: 0.42, metalness: 0 });
+const matInner = new THREE.MeshBasicMaterial({ color: 0xf4f4f2, side: THREE.DoubleSide });
+const matSide = new THREE.MeshStandardMaterial({ color: C.cream, emissive: C.cream, emissiveIntensity: 0.25, roughness: 0.9, side: THREE.DoubleSide });
+const MATS = [matOuter, matInner, matSide];
+
+/* ---------- build shell fragments ---------- */
+const R = 1, r = 0.86;
+function buildFragmentGeometries() {
+  const base = new THREE.IcosahedronGeometry(1, 14);
+  const p = base.attributes.position.array, F = p.length / 9;
+  const N = 140, seeds = [];
+  const ga = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i + .5) / N * 2, rr = Math.sqrt(1 - y * y), th = i * ga;
+    seeds.push(new THREE.Vector3(Math.cos(th) * rr + rand(-.08, .08), y + rand(-.08, .08), Math.sin(th) * rr + rand(-.08, .08)).normalize());
+  }
+  const lists = Array.from({ length: N }, () => []);
+  const tmp = new THREE.Vector3();
+  for (let f = 0; f < F; f++) {
+    const o = f * 9;
+    tmp.set(p[o] + p[o + 3] + p[o + 6], p[o + 1] + p[o + 4] + p[o + 7], p[o + 2] + p[o + 5] + p[o + 8]).normalize();
+    let best = 0, bd = -2;
+    for (let s = 0; s < N; s++) { const d = tmp.dot(seeds[s]); if (d > bd) { bd = d; best = s; } }
+    lists[best].push(f);
+  }
+  const vkey = (v) => `${Math.round(v.x * 1e4)},${Math.round(v.y * 1e4)},${Math.round(v.z * 1e4)}`;
+  const uvOf = (v) => [0.5 + Math.atan2(v.z, v.x) / (2 * Math.PI), 0.5 + Math.asin(Math.max(-1, Math.min(1, v.y))) / Math.PI];
+  const out = [];
+
+  for (const list of lists) {
+    if (!list.length) continue;
+    const faces = list.map(f => { const o = f * 9; return [0, 1, 2].map(k => new THREE.Vector3(p[o + k * 3], p[o + k * 3 + 1], p[o + k * 3 + 2]).normalize()); });
+    const edgeCount = new Map();
+    const ek = (a, b) => { const ka = vkey(a), kb = vkey(b); return ka < kb ? ka + '|' + kb : kb + '|' + ka; };
+    for (const [A, B, Cc] of faces) for (const [a, b] of [[A, B], [B, Cc], [Cc, A]]) { const k = ek(a, b); edgeCount.set(k, (edgeCount.get(k) || 0) + 1); }
+
+    const centroid = new THREE.Vector3();
+    faces.forEach(([A, B, Cc]) => centroid.add(A).add(B).add(Cc));
+    const dir = centroid.clone().normalize();
+    centroid.copy(dir).multiplyScalar((R + r) / 2);
+
+    const oP = [], oN = [], oU = [], iP = [], iN = [], sP = [], sN = [];
+    const push = (arr, v) => arr.push(v.x, v.y, v.z);
+    for (const [A, B, Cc] of faces) {
+      // outer
+      [A, B, Cc].forEach(v => { push(oP, v.clone().multiplyScalar(R)); push(oN, v); });
+      let us = [A, B, Cc].map(uvOf);
+      const uu = us.map(u => u[0]);
+      if (Math.max(...uu) - Math.min(...uu) > 0.5) us = us.map(([u, v]) => [u < 0.5 ? u + 1 : u, v]);
+      us.forEach(([u, v]) => oU.push(u, v));
+      // inner (reverse winding)
+      [A, Cc, B].forEach(v => { push(iP, v.clone().multiplyScalar(r)); push(iN, v.clone().negate()); });
+      // side walls on fragment boundary
+      const fc = A.clone().add(B).add(Cc).multiplyScalar(1 / 3).multiplyScalar((R + r) / 2);
+      for (const [a, b] of [[A, B], [B, Cc], [Cc, A]]) {
+        if (edgeCount.get(ek(a, b)) !== 1) continue;
+        const aR = a.clone().multiplyScalar(R), bR = b.clone().multiplyScalar(R), br = b.clone().multiplyScalar(r), ar = a.clone().multiplyScalar(r);
+        const n = new THREE.Vector3().subVectors(bR, aR).cross(new THREE.Vector3().subVectors(ar, aR)).normalize();
+        const mid = aR.clone().add(br).multiplyScalar(.5);
+        let tris;
+        if (n.dot(mid.sub(fc)) < 0) { n.negate(); tris = [aR, br, bR, aR, ar, br]; } else tris = [aR, bR, br, aR, br, ar];
+        tris.forEach(v => { push(sP, v); push(sN, n); });
+      }
+    }
+    const pos = new Float32Array([...oP, ...iP, ...sP]);
+    for (let i = 0; i < pos.length; i += 3) { pos[i] -= centroid.x; pos[i + 1] -= centroid.y; pos[i + 2] -= centroid.z; }
+    const nrm = new Float32Array([...oN, ...iN, ...sN]);
+    const uv = new Float32Array(pos.length / 3 * 2); uv.set(oU);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    const no = oP.length / 3, ni = iP.length / 3, ns = sP.length / 3;
+    geo.addGroup(0, no, 0); geo.addGroup(no, ni, 1); geo.addGroup(no + ni, ns, 2);
+    geo.computeBoundingSphere();
+    out.push({ geo, centroid, dir });
+  }
+  return out;
+}
+const FRAGS = buildFragmentGeometries();
+
+/* ---------- inner core: monochrome drawing ---------- */
+function buildCore() {
+  const core = new THREE.Group();
+  const black = new THREE.LineBasicMaterial({ color: 0x111111 });
+  const grey = new THREE.LineBasicMaterial({ color: 0x8a8a8a, transparent: true, opacity: .8 });
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 32, 16), new THREE.MeshBasicMaterial({ color: 0x0a0a0a })));
+  // spikes (sea-urchin)
+  const sp = [];
+  for (let i = 0; i < 1600; i++) {
+    const d = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();
+    const L = 0.16 + Math.pow(Math.random(), 2.4) * 0.48, s = 0.05;
+    sp.push(d.x * s, d.y * s, d.z * s, d.x * L, d.y * L, d.z * L);
+  }
+  const spG = new THREE.BufferGeometry(); spG.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+  core.add(new THREE.LineSegments(spG, black));
+  // dotted orbits
+  const pts = [];
+  for (let k = 0; k < 7; k++) {
+    const rad = 0.5 + k * 0.045, q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(0, 3), rand(0, 3), rand(0, 3)));
+    const n = 140 + k * 14;
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; const v = new THREE.Vector3(Math.cos(a) * rad, 0, Math.sin(a) * rad).applyQuaternion(q); pts.push(v.x, v.y, v.z); }
+  }
+  const pG = new THREE.BufferGeometry(); pG.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  core.add(new THREE.Points(pG, new THREE.PointsMaterial({ color: 0x9a9a9a, size: 0.012 })));
+  // curved stems
+  for (let i = 0; i < 7; i++) {
+    const a = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();
+    const b = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();
+    const curve = new THREE.CatmullRomCurve3([a.clone().multiplyScalar(.1), a.clone().multiplyScalar(.45).add(b.clone().multiplyScalar(.15)), a.clone().lerp(b, .5).normalize().multiplyScalar(.72), b.clone().multiplyScalar(.6)]);
+    const g = new THREE.BufferGeometry().setFromPoints(curve.getPoints(60));
+    core.add(new THREE.Line(g, i < 3 ? black : grey));
+  }
+  // crosses
+  const cr = [];
+  for (let i = 0; i < 40; i++) {
+    const c = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(.45, .78));
+    const s = rand(.015, .035), t = rand(.03, .06);
+    const u = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize(), v = new THREE.Vector3().crossVectors(c, u).normalize();
+    cr.push(c.x - u.x * s, c.y - u.y * s, c.z - u.z * s, c.x + u.x * s, c.y + u.y * s, c.z + u.z * s);
+    cr.push(c.x - v.x * t, c.y - v.y * t, c.z - v.z * t, c.x + v.x * t, c.y + v.y * t, c.z + v.z * t);
+  }
+  const cG = new THREE.BufferGeometry(); cG.setAttribute('position', new THREE.Float32BufferAttribute(cr, 3));
+  core.add(new THREE.LineSegments(cG, black));
+  // small grey triangles
+  for (let i = 0; i < 6; i++) {
+    const c = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(.4, .7));
+    const m = new THREE.Mesh(new THREE.ConeGeometry(.018, .07, 3), new THREE.MeshBasicMaterial({ color: 0x9a9a9a }));
+    m.position.copy(c); m.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6)); core.add(m);
+  }
+  return core;
+}
+
+/* ---------- scene graph ---------- */
+const shell = new THREE.Group(); scene.add(shell);
+const core = buildCore(); shell.add(core);
+let chunks = [];             // alive fragments still attached
+let flyers = [];             // detached fragments + crumbs
+const TOTAL = FRAGS.length;
+const crumbGeo = new THREE.IcosahedronGeometry(0.022, 0);
+const crumbMats = [C.orange, C.yellow, C.mint, C.green, C.red, '#ffffff'].map(c => new THREE.MeshBasicMaterial({ color: c }));
+
+function spawnShell() {
+  for (const c of chunks) shell.remove(c);
+  for (const f of flyers) scene.remove(f.obj);
+  chunks = []; flyers = [];
+  for (const f of FRAGS) {
+    const m = new THREE.Mesh(f.geo, MATS);
+    m.position.copy(f.centroid);
+    m.userData = { base: f.centroid, dir: f.dir, off: 0 };
+    shell.add(m); chunks.push(m);
+  }
+}
+
+
+/* ================= scattered poster graphics ================= */
+const fxCanvas = document.getElementById('fx'), fxg = fxCanvas.getContext('2d');
+const SPRITES = { glyph: [], flower: [], dot: [] };
+(function buildSprites() {
+  const mk = (size, fn) => { const cv = document.createElement('canvas'); cv.width = cv.height = size; fn(cv.getContext('2d'), size); return cv; };
+  for (let i = 0; i < 18; i++) SPRITES.glyph.push(mk(320, (c, n) => makePainter(c).glyph(n / 2 - 6, n / 2 - 6, rand(68, 82), rand(42, 56))));
+  for (let i = 0; i < 8; i++) SPRITES.flower.push(mk(256, (c, n) => makePainter(c).flower(n / 2, n / 2, n * 0.46, i % 4)));
+  for (const col of [C.yellow, C.green, C.red, C.mint, C.yellow]) SPRITES.dot.push(mk(64, (c, n) => makePainter(c).disc(n / 2, n / 2, n * 0.46, col)));
+})();
+let pieces = [];
+const fxView = { w: 1, h: 1, dpr: 1 };
+function resizeFx() {
+  fxView.dpr = Math.min(devicePixelRatio, 2); fxView.w = innerWidth; fxView.h = innerHeight;
+  fxCanvas.width = fxView.w * fxView.dpr; fxCanvas.height = fxView.h * fxView.dpr;
+}
+addEventListener('resize', resizeFx); resizeFx();
+function sphereScreenRadius() {
+  return (1.05 / (camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)))) * (fxView.h / 2);
+}
+const _proj = new THREE.Vector3();
+function scatter(worldPoint, n) {
+  _proj.copy(worldPoint).project(camera);
+  const sx = (_proj.x * 0.5 + 0.5) * fxView.w, sy = (-_proj.y * 0.5 + 0.5) * fxView.h;
+  const cx = fxView.w / 2, cy = fxView.h / 2, Rs = sphereScreenRadius();
+  const base = Math.atan2(sy - cy, sx - cx);
+  const reach = Math.max(fxView.w, fxView.h) * 0.5;
+  for (let i = 0; i < n; i++) {
+    const roll = Math.random();
+    const kind = roll < 0.5 ? 'glyph' : roll < 0.72 ? 'flower' : 'dot';
+    const list = SPRITES[kind], img = list[Math.random() * list.length | 0];
+    const size = kind === 'glyph' ? rand(70, 150) : kind === 'flower' ? rand(60, 110) : rand(12, 26);
+    const ang = base + rand(-0.9, 0.9), dist = rand(Rs * 1.12 + size * 0.4, Rs * 1.12 + reach * 0.75);
+    const tx = Math.min(fxView.w - size * 0.4, Math.max(size * 0.4, cx + Math.cos(ang) * dist));
+    const ty = Math.min(fxView.h - size * 0.4, Math.max(size * 0.4, cy + Math.sin(ang) * dist));
+    const r0 = rand(-3, 3);
+    pieces.push({ img, sx, sy, tx, ty, size, t: 0, dur: rand(0.7, 1.3), r0, r1: r0 + rand(-2.5, 2.5), spin: rand(-0.15, 0.15), ph: rand(0, 6.28) });
+  }
+  if (pieces.length > 260) pieces.splice(0, pieces.length - 260);
+}
+function drawFx(time, dt) {
+  const { w, h, dpr } = fxView;
+  fxg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxg.clearRect(0, 0, w, h);
+  for (const p of pieces) {
+    p.t += dt;
+    const k = Math.min(1, p.t / p.dur), e = 1 - Math.pow(1 - k, 3);
+    const x = p.sx + (p.tx - p.sx) * e + Math.sin(time * 0.4 + p.ph) * 5 * e;
+    const y = p.sy + (p.ty - p.sy) * e + Math.cos(time * 0.33 + p.ph) * 5 * e;
+    const sc = p.size * (0.35 + 0.65 * e);
+    fxg.save(); fxg.translate(x, y); fxg.rotate(p.r0 + (p.r1 - p.r0) * e + p.spin * time);
+    fxg.drawImage(p.img, -sc / 2, -sc / 2, sc, sc); fxg.restore();
+  }
+}
+
+/* ================= state ================= */
+const state = { progress: 0, collapsing: false, final: false, intro: 0, s: 1, sv: 0, coreScale: 1, lastInteract: performance.now(), started: false };
+const hint = document.getElementById('hint');
+
+function reset() {
+  spawnShell();
+  pieces = [];
+  shell.quaternion.identity(); shell.rotation.set(0.25, -0.4, 0);
+  Object.assign(state, { progress: 0, collapsing: false, final: false, intro: 0, s: 1, sv: 0, coreScale: 1, lastInteract: performance.now(), started: false });
+  document.body.classList.remove('final');
+  hint.style.visibility = '';
+  updateUI();
+}
+
+/* ================= breaking ================= */
+const worldDir = new THREE.Vector3();
+function detach(m, strength = 1) {
+  const i = chunks.indexOf(m); if (i < 0) return;
+  chunks.splice(i, 1);
+  scene.attach(m);
+  worldDir.copy(m.userData.dir).applyQuaternion(shell.quaternion);
+  const v = worldDir.clone().multiplyScalar(rand(1.3, 2.4) * strength).add(new THREE.Vector3(rand(-.5, .5), rand(0, .9), rand(.2, .9)));
+  flyers.push({ obj: m, v, w: new THREE.Vector3(rand(-6, 6), rand(-6, 6), rand(-6, 6)), life: 2.2, max: 2.2, s0: m.scale.x });
+}
+function crumbs(point, n) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(crumbGeo, crumbMats[i % crumbMats.length]);
+    m.position.copy(point); scene.add(m);
+    const life = rand(.6, 1.1);
+    flyers.push({ obj: m, v: new THREE.Vector3(rand(-1.6, 1.6), rand(-.6, 2), rand(0, 1.8)), w: new THREE.Vector3(rand(-9, 9), rand(-9, 9), 0), life, max: life, s0: 1 });
+  }
+}
+// forgiving tap: if the ray goes through a hole, grab the closest remaining fragment
+const _sph = new THREE.Sphere(new THREE.Vector3(), 1.05), _pt = new THREE.Vector3(), _inv = new THREE.Quaternion();
+function nearestChunkOnRay() {
+  if (!chunks.length) return null;
+  _sph.radius = 1.05 * shell.scale.x;
+  if (!raycaster.ray.intersectSphere(_sph, _pt)) return null;
+  const local = _pt.clone().normalize().applyQuaternion(_inv.copy(shell.quaternion).invert());
+  let best = null, bd = -2;
+  for (const c of chunks) { const d = c.userData.dir.dot(local); if (d > bd) { bd = d; best = c; } }
+  return { object: best, point: _pt.clone() };
+}
+function breakChunk(hit) {
+  const m = hit.object, d = m.userData.dir;
+  const group = [m];
+  for (const c of chunks) {
+    if (c === m) continue;
+    const k = c.userData.dir.dot(d);
+    if (k > 0.8 || (k > 0.7 && Math.random() < 0.5)) group.push(c);
+  }
+  group.forEach(c => detach(c));
+  crumbs(hit.point, 22);
+  scatter(hit.point, 12);
+  state.sv -= 3.2;
+  state.started = true;
+  hint.style.visibility = 'hidden';
+  updateProgress();
+}
+function updateProgress() {
+  state.progress = 1 - chunks.length / TOTAL;
+  if (state.progress >= 0.42 && !state.collapsing) collapse();
+  updateUI();
+}
+function collapse() {
+  state.collapsing = true;
+  const rest = [...chunks].sort(() => Math.random() - .5);
+  rest.forEach((c, i) => setTimeout(() => { detach(c, 0.8); updateUIOnly(); }, 200 + i * (1400 / rest.length)));
+  for (let j = 0; j < 6; j++) setTimeout(() => { const d = new THREE.Vector3(rand(-1, 1), rand(-1, 1), 0.6).normalize(); scatter(d, 7); }, 200 + j * 220);
+  setTimeout(() => { state.final = true; document.body.classList.add('final'); updateUI(); }, 1900);
+}
+
+/* ================= UI ================= */
+const meter = document.getElementById('meter');
+function updateUIOnly() { state.progress = 1 - chunks.length / TOTAL; updateUI(); }
+function updateUI() {
+  const p = state.progress;
+  const outerA = Math.max(0, 1 - p * 1.45);
+  outerLayer.style.opacity = outerA;
+  innerLayer.style.opacity = Math.min(1, p * 1.4);
+  meter.textContent = String(Math.round((1 - p) * 100)).padStart(3, '0') + '%';
+  document.documentElement.style.setProperty('--p', p);
+}
+
+/* ================= input ================= */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2(), pointer = { x: 0, y: 0, inside: false };
+let down = null, dragging = false;
+const rotVel = { x: 0, y: 0 };
+const AX_Y = new THREE.Vector3(0, 1, 0), AX_X = new THREE.Vector3(1, 0, 0);
+
+function setNdc(e) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+}
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY };
+  dragging = false; state.lastInteract = performance.now();
+});
+canvas.addEventListener('pointermove', e => {
+  setNdc(e); pointer.inside = true;
+  if (!down) return;
+  const dx = e.clientX - down.lx, dy = e.clientY - down.ly;
+  if (!dragging && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 7) dragging = true;
+  if (dragging) {
+    shell.rotateOnWorldAxis(AX_Y, dx * 0.006); shell.rotateOnWorldAxis(AX_X, dy * 0.006);
+    rotVel.y = dx * 0.006; rotVel.x = dy * 0.006;
+  }
+  down.lx = e.clientX; down.ly = e.clientY;
+  state.lastInteract = performance.now();
+});
+canvas.addEventListener('pointerup', e => {
+  if (down && !dragging) {
+    setNdc(e);
+    raycaster.setFromCamera(ndc, camera);
+    let hit = raycaster.intersectObjects(chunks, false)[0];
+    if (!hit) hit = nearestChunkOnRay();
+    if (hit) breakChunk(hit);
+  }
+  down = null; dragging = false;
+});
+canvas.addEventListener('pointerleave', () => { pointer.inside = false; });
+canvas.addEventListener('pointercancel', () => { down = null; dragging = false; });
+
+document.getElementById('again').addEventListener('click', reset);
+document.getElementById('fs').addEventListener('click', () => {
+  try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}); } catch (_) {}
+});
+addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') reset(); });
+
+/* ================= hand tracking (camera) ================= */
+// Swing a hand fast, or close an open hand into a fist, to smash the sphere.
+const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const camVideo = document.getElementById('cam'), camStatus = document.getElementById('cam-status');
+const handCursors = [0, 1].map(() => { const d = document.createElement('div'); d.className = 'hand'; document.body.appendChild(d); return d; });
+const hands = [0, 1].map(() => ({ x: 0, y: 0, vx: 0, vy: 0, seen: 0, wasOpen: false, last: 0, lt: 0, fist: false, pulse: 0 }));
+let landmarker = null, lastVideoTime = -1, handActive = false;
+const SMASH_SPEED = 2.0;   // screen-heights per second
+const COOLDOWN = 380;      // ms between smashes per hand
+
+async function startHands() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no camera api');
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
+    camVideo.srcObject = stream; await camVideo.play();
+    camStatus.textContent = '손 인식 준비 중…';
+    const { FilesetResolver, HandLandmarker } = await import(MP + '/vision_bundle.mjs');
+    const fileset = await FilesetResolver.forVisionTasks(MP + '/wasm');
+    const opts = (delegate) => ({ baseOptions: { modelAssetPath: HAND_MODEL, delegate }, runningMode: 'VIDEO', numHands: 2,
+      minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
+    try { landmarker = await HandLandmarker.createFromOptions(fileset, opts('GPU')); }
+    catch (_) { landmarker = await HandLandmarker.createFromOptions(fileset, opts('CPU')); }
+    handActive = true;
+    document.body.classList.add('cam-on');
+    camStatus.textContent = '● HAND TRACKING';
+    hint.textContent = '손을 휘두르거나 주먹을 쥐어 구를 부숴보세요';
+  } catch (e) {
+    console.warn('hand tracking off:', e);
+    camStatus.textContent = '카메라 꺼짐 · 터치/클릭으로 깎을 수 있어요';
+  }
+}
+
+const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+function isFist(lm) {
+  const w = lm[0]; let curled = 0;
+  for (const [tip, pip] of [[8, 6], [12, 10], [16, 14], [20, 18]]) if (dist3(lm[tip], w) < dist3(lm[pip], w) * 1.05) curled++;
+  return curled >= 3;
+}
+const _hn = new THREE.Vector2();
+function smashAt(x, y) {
+  if (!chunks.length || state.collapsing) return;
+  const W = innerWidth, H = innerHeight, cx = W / 2, cy = H / 2, Rs = sphereScreenRadius() * 0.9;
+  let dx = x - cx, dy = y - cy; const d = Math.hypot(dx, dy);
+  if (d > Rs) { dx *= Rs / d; dy *= Rs / d; }   // a smash anywhere still lands on the sphere
+  _hn.set(((cx + dx) / W) * 2 - 1, -((cy + dy) / H) * 2 + 1);
+  raycaster.setFromCamera(_hn, camera);
+  const hit = raycaster.intersectObjects(chunks, false)[0] || nearestChunkOnRay();
+  if (hit) breakChunk(hit);
+}
+function updateHands() {
+  if (!handActive || camVideo.readyState < 2) return;
+  const now = performance.now();
+  if (camVideo.currentTime !== lastVideoTime) {
+    lastVideoTime = camVideo.currentTime;
+    let res; try { res = landmarker.detectForVideo(camVideo, now); } catch (_) { return; }
+    const lms = (res && res.landmarks) || [];
+    const W = innerWidth, H = innerHeight;
+    hands.forEach((h, i) => {
+      const lm = lms[i];
+      if (!lm) { h.seen = 0; return; }
+      let px = 0, py = 0; for (const k of [0, 5, 9, 13, 17]) { px += lm[k].x; py += lm[k].y; } px /= 5; py /= 5;
+      // mirror + widen so a comfortable arm range covers the whole screen
+      const x = Math.min(W, Math.max(0, (0.5 + ((1 - px) - 0.5) * 1.6) * W));
+      const y = Math.min(H, Math.max(0, (0.5 + (py - 0.5) * 1.6) * H));
+      const step = h.seen ? Math.max(0.016, (now - h.lt) / 1000) : 1;
+      const nvx = h.seen ? (x - h.x) / step : 0, nvy = h.seen ? (y - h.y) / step : 0;
+      h.vx += (nvx - h.vx) * 0.55; h.vy += (nvy - h.vy) * 0.55;
+      h.x = h.seen ? h.x + (x - h.x) * 0.65 : x; h.y = h.seen ? h.y + (y - h.y) * 0.65 : y;
+      h.lt = now; h.seen++;
+      h.fist = isFist(lm);
+      let smash = false;
+      if (h.fist) { if (h.wasOpen) smash = true; h.wasOpen = false; } else h.wasOpen = true;
+      if (h.seen > 4 && Math.hypot(h.vx, h.vy) / H > SMASH_SPEED) smash = true;
+      if (smash && now - h.last > COOLDOWN) { h.last = now; h.pulse = 1; smashAt(h.x, h.y); }
+      state.lastInteract = now;
+    });
+    if (hands[0].seen) { ndc.set((hands[0].x / W) * 2 - 1, -(hands[0].y / H) * 2 + 1); pointer.inside = true; }
+  }
+  hands.forEach((h, i) => {
+    const el = handCursors[i];
+    el.classList.toggle('on', h.seen > 0);
+    h.pulse *= 0.85;
+    const s = (h.fist ? 0.62 : 1) * (1 + h.pulse * 0.8);
+    el.style.transform = `translate(${h.x}px, ${h.y}px) translate(-50%, -50%) scale(${s})`;
+  });
+}
+startHands();
+
+/* ================= resize ================= */
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.position.set(0, 0, 4.6 * Math.max(1, 0.9 / camera.aspect));
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+/* ================= loop ================= */
+const clock = new THREE.Clock();
+let t = 0;
+const easeOutBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05); t += dt;
+  const now = performance.now();
+
+  // idle auto-reset for the exhibition
+  if (state.started && now - state.lastInteract > (state.final ? 40000 : 90000)) reset();
+
+  // rotation: inertia + gentle auto spin
+  if (!dragging) {
+    shell.rotateOnWorldAxis(AX_Y, rotVel.y + dt * 0.12); shell.rotateOnWorldAxis(AX_X, rotVel.x);
+    rotVel.x *= 0.94; rotVel.y *= 0.94;
+  }
+  core.rotation.y += dt * 0.08; core.rotation.z += dt * 0.025;
+
+  // intro + impact spring
+  state.intro = Math.min(1, state.intro + dt / 1.2);
+  state.sv += (-(state.s - 1) * 170 - state.sv * 11) * dt;
+  state.s += state.sv * dt;
+  const breathe = 1 + Math.sin(t * 1.6) * 0.008;
+  shell.scale.setScalar(Math.max(0.001, easeOutBack(state.intro) * state.s * breathe));
+  state.coreScale += ((state.final ? 1.35 : 1) - state.coreScale) * 0.04;
+  core.scale.setScalar(state.coreScale);
+
+  updateHands();
+
+  // hover: lift the fragment under the pointer, as if it's about to crack
+  let hovered = null;
+  if (pointer.inside && !dragging && chunks.length && !state.collapsing) {
+    raycaster.setFromCamera(ndc, camera);
+    const h = raycaster.intersectObjects(chunks, false)[0];
+    if (h) hovered = h.object;
+  }
+  for (const c of chunks) {
+    const u = c.userData;
+    const target = c === hovered ? 0.04 + Math.sin(t * 30) * 0.004 : 0;
+    u.off += (target - u.off) * 0.25;
+    c.position.copy(u.base).addScaledVector(u.dir, u.off);
+  }
+
+  // flying debris
+  for (let i = flyers.length - 1; i >= 0; i--) {
+    const f = flyers[i];
+    f.v.y -= 4.5 * dt;
+    f.obj.position.addScaledVector(f.v, dt);
+    f.obj.rotation.x += f.w.x * dt; f.obj.rotation.y += f.w.y * dt; f.obj.rotation.z += f.w.z * dt;
+    f.life -= dt;
+    const k = Math.max(0, f.life / f.max);
+    f.obj.scale.setScalar(f.s0 * Math.pow(k, 0.6));
+    if (f.life <= 0) { scene.remove(f.obj); flyers.splice(i, 1); }
+  }
+
+  renderer.render(scene, camera);
+  drawFx(t, dt);
+  requestAnimationFrame(tick);
+}
+
+reset();
+tick();
+</script>
+</body>
+</html>
